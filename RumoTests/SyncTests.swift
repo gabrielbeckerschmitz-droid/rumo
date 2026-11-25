@@ -554,7 +554,7 @@ final class SyncCorrecoesTests: XCTestCase {
         let h: TimeInterval = 3600
         XCTAssertNil(Sync.proximoDespertar([], agora: agora))
         XCTAssertEqual(Sync.proximoDespertar([agora.addingTimeInterval(600), agora.addingTimeInterval(60)], agora: agora), agora.addingTimeInterval(60))
-        XCTAssertEqual(Sync.proximoDespertar([agora.addingTimeInterval(-500)], agora: agora), agora.addingTimeInterval(5), "data vencida: logo, mas não em laço")
+        XCTAssertNil(Sync.proximoDespertar([agora.addingTimeInterval(-500)], agora: agora), "data vencida não conta (sem laço)")
         XCTAssertEqual(Sync.proximoDespertar([agora.addingTimeInterval(10 * h)], agora: agora), agora.addingTimeInterval(h), "limitado ao teto do backoff")
     }
 
@@ -622,6 +622,52 @@ final class SyncCorrecoesTests: XCTestCase {
         let rel = await a.rodar()
         XCTAssertEqual(rel.reenviados, 3)
         XCTAssertEqual(FakeGitHub.gets.filter { $0 == "inbox" }.count, 1, "uma listagem da inbox por rodada")
+    }
+
+    func testPastRetryDateWith401DoesNotReschedule() async throws {
+        let a = try Ambiente()
+        let i = try a.item(audio: Data(repeating: 1, count: 20))
+        i.proximaTentativa = agora.addingTimeInterval(-600)  // sobra de uma falha antiga
+        FakeGitHub.falha = { _, _, _ in .status(401) }
+        _ = await a.rodar()
+        XCTAssertNil(a.sync.proximaExecucao, "token vencido nunca agenda tentativa por timer")
+    }
+
+    func testPastRetryDateWithUnreadableFileDoesNotLoop() async throws {
+        let a = try Ambiente()
+        let i = try a.item(audio: Data(repeating: 1, count: 20))
+        i.proximaTentativa = agora.addingTimeInterval(-600)
+        try FileManager.default.removeItem(at: try a.arquivo(i))
+        _ = await a.rodar()
+        XCTAssertNil(i.proximaTentativa, "caminhos de pular limpam a data")
+        XCTAssertNil(a.sync.proximaExecucao)
+
+        let j = try a.item(audio: Data(repeating: 1, count: 20), criadoEm: Date(timeIntervalSince1970: 1_799_990_500))
+        j.proximaTentativa = agora.addingTimeInterval(-600)
+        a.sync.protegidosDisponiveis = { false }
+        _ = await a.rodar()
+        XCTAssertNil(j.proximaTentativa)
+        XCTAssertNil(a.sync.proximaExecucao)
+    }
+
+    func testOnlyFutureDatesCount() async throws {
+        let a = try Ambiente()
+        let i = try a.item(audio: Data(repeating: 1, count: 20), estado: .aguardandoInternet)
+        i.proximaTentativa = agora.addingTimeInterval(-600)
+        let j = try a.item(audio: Data(repeating: 1, count: 20), estado: .aguardandoInternet, criadoEm: Date(timeIntervalSince1970: 1_799_990_500))
+        j.proximaTentativa = agora.addingTimeInterval(120)
+        XCTAssertEqual(Sync.proximoDespertar([i.proximaTentativa!, j.proximaTentativa!], agora: agora), agora.addingTimeInterval(120))
+        XCTAssertNil(Sync.proximoDespertar([agora.addingTimeInterval(-600)], agora: agora), "data vencida não agenda")
+        FakeGitHub.falha = { _, _, _ in .rede }  // falha real: backoff futuro genuíno ainda agenda
+        _ = await a.rodar()
+        XCTAssertEqual(a.sync.proximaExecucao, agora.addingTimeInterval(30))
+    }
+
+    func testFilaFolderCreatedExcludedFromBackup() throws {
+        let a = try Ambiente()
+        let pasta = try Fila.garantirPasta(base: a.tmp)
+        XCTAssertEqual(pasta.lastPathComponent, "fila")
+        XCTAssertEqual(try pasta.resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup, true)
     }
 
     func testExcludedFromBackup() throws {
