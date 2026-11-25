@@ -24,8 +24,8 @@ final class Sync {
 
     /// Quando tentar de novo: a menor `proximaTentativa` pendente, com piso de 5 s e teto de 1 h. Função pura.
     nonisolated static func proximoDespertar(_ datas: [Date], agora: Date) -> Date? {
-        guard let menor = datas.min() else { return nil }
-        return min(max(menor, agora.addingTimeInterval(5)), agora.addingTimeInterval(teto))
+        guard let menor = datas.filter({ $0 > agora }).min() else { return nil }  // data vencida não agenda: evita laço
+        return min(menor, agora.addingTimeInterval(teto))
     }
 
     /// Falso quando o iPhone está bloqueado e os arquivos protegidos não podem ser lidos (ligado em SyncGatilhos).
@@ -51,7 +51,7 @@ final class Sync {
         rodando = true
         ultimoErro = nil
         defer { rodando = false }
-        Destinos.excluirDoBackup(Fila.url("fila", base: baseFila))
+        _ = try? Fila.garantirPasta(base: baseFila)
         var tokenVencido = false
         func tratar(_ erro: Error) {
             if let e = erro as? GitHubErro {
@@ -74,7 +74,7 @@ final class Sync {
             } catch { tratar(error) }
         }
         rel.audiosApagados = apagarAudiosAntigos(store, now)
-        proximaExecucao = calcularProximaExecucao(store, now)
+        proximaExecucao = tokenVencido ? nil : calcularProximaExecucao(store, now)  // token vencido: nunca por timer
         return rel
     }
 
@@ -144,15 +144,18 @@ final class Sync {
             item.partesEnviadas = 1
         } else {
             // Leitura que falha agora (celular bloqueado, arquivo ainda sendo gravado...) não muda nada: tenta na próxima.
+            // Caminhos de "pular" limpam proximaTentativa: dependem dos gatilhos normais (abrir, rede, fundo), não de timer.
             guard protegidosDisponiveis(), let rel = item.arquivoCifrado,
-                  let blob = try? Data(contentsOf: Fila.url(rel, base: baseFila)) else { return }
+                  let blob = try? Data(contentsOf: Fila.url(rel, base: baseFila)) else { item.proximaTentativa = nil; return }
             guard let m4a = try? Crypto.open(blob, key: chave) else {  // arquivo lido, mas a chave não abre
                 item.erroTexto = "Não consegui abrir esta gravação com a chave atual — ela foi feita antes de um novo pareamento?"
+                item.proximaTentativa = nil
                 try? store.save()
                 return
             }
             guard !m4a.isEmpty else {
                 item.erroTexto = "Gravação vazia."
+                item.proximaTentativa = nil
                 try? store.save()
                 return
             }
