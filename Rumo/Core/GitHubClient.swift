@@ -11,7 +11,7 @@ enum GitHubErro: Error, LocalizedError, Equatable {
         switch self {
         case .tokenVencido: return "O token do GitHub venceu — gere um novo no PC (passo a passo no guia)."
         case .semConexao(let m): return m
-        case .github(let s): return "O GitHub não aceitou o pedido (código \(s)). O Rumo tenta de novo sozinho."
+        case .github(let s): return "O GitHub não aceitou o pedido (código \(s)). O Rumo tenta de novo enquanto o app estiver aberto; você também pode tocar em Sincronizar agora."
         }
     }
 }

@@ -1,5 +1,6 @@
 import CryptoKit
 import Foundation
+import Observation
 import SwiftData
 
 struct SyncReport: Equatable {
@@ -16,8 +17,21 @@ struct SyncReport: Equatable {
 /// Regras: nada se perde; áudio só é apagado depois de `processado`; reenvio não duplica (o PC deduplica
 /// por nota_id e parte); nunca registra token nem conteúdo.
 @MainActor
+@Observable
 final class Sync {
     static let shared = Sync()
+    static let teto: TimeInterval = 3600  // teto do Backoff
+
+    /// Quando tentar de novo: a menor `proximaTentativa` pendente, com piso de 5 s e teto de 1 h. Função pura.
+    nonisolated static func proximoDespertar(_ datas: [Date], agora: Date) -> Date? {
+        guard let menor = datas.min() else { return nil }
+        return min(max(menor, agora.addingTimeInterval(5)), agora.addingTimeInterval(teto))
+    }
+
+    /// Falso quando o iPhone está bloqueado e os arquivos protegidos não podem ser lidos (ligado em SyncGatilhos).
+    @ObservationIgnored var protegidosDisponiveis: () -> Bool = { true }
+    /// Quando uma nova tentativa deve acontecer (nil se não há nada esperando). O app agenda `run()` para esta data.
+    private(set) var proximaExecucao: Date?
 
     var tamanhoParte = GitHubClient.tamanhoParte
     var destinosURL = Destinos.arquivoPadrao
@@ -37,20 +51,37 @@ final class Sync {
         rodando = true
         ultimoErro = nil
         defer { rodando = false }
-        do {
-            try await enviarPendentes(store, client, chave, now, &rel)
-            try await receber(store, client, chave, &rel)
-            try await baixarDestinos(client, chave)
-            try await reenviarFaltantes(store, client, now, &rel)
-            if rel.reenviados > 0 { try await enviarPendentes(store, client, chave, now, &rel) }
-        } catch let e as GitHubErro {
-            if case .semConexao = e { rel.semInternet = true } else { ultimoErro = e.errorDescription; rel.erro = ultimoErro }
-        } catch {
-            ultimoErro = "Algo deu errado ao sincronizar. A gravação continua guardada."
-            rel.erro = ultimoErro
+        Destinos.excluirDoBackup(Fila.url("fila", base: baseFila))
+        var tokenVencido = false
+        func tratar(_ erro: Error) {
+            if let e = erro as? GitHubErro {
+                if e == .tokenVencido { tokenVencido = true }
+                if case .semConexao = e { rel.semInternet = true; return }
+                if ultimoErro == nil { ultimoErro = e.errorDescription; rel.erro = ultimoErro }
+            } else if ultimoErro == nil {
+                ultimoErro = "Algo deu errado ao sincronizar. A gravação continua guardada."
+                rel.erro = ultimoErro
+            }
+        }
+        var envioFalhou = false
+        do { try await enviarPendentes(store, client, chave, now, &rel) } catch { envioFalhou = true; tratar(error) }
+        if !tokenVencido {  // falha de envio não impede receber; token vencido para tudo
+            do {
+                try await receber(store, client, chave, &rel)
+                try await baixarDestinos(client, chave)
+                try await reenviarFaltantes(store, client, now, &rel)
+                if rel.reenviados > 0 && !envioFalhou { try await enviarPendentes(store, client, chave, now, &rel) }
+            } catch { tratar(error) }
         }
         rel.audiosApagados = apagarAudiosAntigos(store, now)
+        proximaExecucao = calcularProximaExecucao(store, now)
         return rel
+    }
+
+    private func calcularProximaExecucao(_ store: ModelContext, _ now: Date) -> Date? {
+        var datas = itens(store).filter { $0.estado == .gravado || $0.estado == .aguardandoInternet }.compactMap(\.proximaTentativa)
+        datas += ((try? store.fetch(FetchDescriptor<Pedido>())) ?? []).compactMap(\.proximaTentativa)
+        return Sync.proximoDespertar(datas, agora: now)
     }
 
     // MARK: Envio
@@ -76,8 +107,7 @@ final class Sync {
         for p in pedidos {
             do {
                 try await client.put(novoCaminho(), p.blob)
-                p.enviado = true
-                p.proximaTentativa = nil
+                store.delete(p)  // aceito pela caixa: o blob não fica no banco (o PC deduplica por id)
                 try? store.save()
                 rel.pedidosEnviados += 1
             } catch let e as GitHubErro {
@@ -113,9 +143,16 @@ final class Sync {
             item.caminhosInbox += [caminho]
             item.partesEnviadas = 1
         } else {
-            guard let rel = item.arquivoCifrado, let blob = try? Data(contentsOf: Fila.url(rel, base: baseFila)), let m4a = try? Crypto.open(blob, key: chave) else {
-                item.estado = .erro
-                item.erroTexto = "Não foi possível abrir esta gravação neste iPhone (arquivo ausente ou chave diferente)."
+            // Leitura que falha agora (celular bloqueado, arquivo ainda sendo gravado...) não muda nada: tenta na próxima.
+            guard protegidosDisponiveis(), let rel = item.arquivoCifrado,
+                  let blob = try? Data(contentsOf: Fila.url(rel, base: baseFila)) else { return }
+            guard let m4a = try? Crypto.open(blob, key: chave) else {  // arquivo lido, mas a chave não abre
+                item.erroTexto = "Não consegui abrir esta gravação com a chave atual — ela foi feita antes de um novo pareamento?"
+                try? store.save()
+                return
+            }
+            guard !m4a.isEmpty else {
+                item.erroTexto = "Gravação vazia."
                 try? store.save()
                 return
             }
@@ -154,6 +191,8 @@ final class Sync {
 
     private func receber(_ store: ModelContext, _ client: GitHubClient, _ chave: SymmetricKey, _ rel: inout SyncReport) async throws {
         let entradas = try await client.list("outbox").filter { $0.path.hasSuffix(".bin") }
+        // Baixa e decodifica tudo primeiro; aplica em ordem de tempo (a lista vem em ordem de uuid).
+        var recebidos: [(Entrada, Msg, Resultado)] = []
         for e in entradas {
             let blob: Data
             do { blob = try await client.get(e.path) } catch GitHubErro.github(404) { continue }
@@ -162,6 +201,12 @@ final class Sync {
                 continue
             }
             guard case .resultado(let r) = msg.corpo else { continue }
+            recebidos.append((e, msg, r))
+        }
+        let ordenados = recebidos.enumerated().sorted {
+            ($0.element.1.criadoEm.date, $0.offset) < ($1.element.1.criadoEm.date, $1.offset)
+        }.map(\.element)
+        for (e, msg, r) in ordenados {
             if let item = itens(store).first(where: { $0.notaId == r.notaId.uuid }) {
                 aplicar(msg, r, item)
                 do { try store.save() } catch { continue }  // sem salvar, o resultado fica na caixa
@@ -194,12 +239,11 @@ final class Sync {
 
     /// Enviado há mais de 24 h, sem resultado e sumido da caixa: volta para `gravado` e sai de novo.
     private func reenviarFaltantes(_ store: ModelContext, _ client: GitHubClient, _ now: Date, _ rel: inout SyncReport) async throws {
+        var naCaixa: Set<String>?  // uma listagem da inbox por rodada, só se houver candidato
         for item in itens(store) where item.estado == .enviado {
             guard let enviado = item.enviadoEm, now.timeIntervalSince(enviado) > 24 * 3600 else { continue }
-            var existe = false
-            for caminho in item.caminhosInbox {
-                if try await client.exists(caminho) { existe = true; break }
-            }
+            if naCaixa == nil { naCaixa = Set(try await client.list("inbox").map(\.path)) }
+            let existe = item.caminhosInbox.contains { naCaixa?.contains($0) == true }
             if Store.precisaReenviar(item, agora: now, existeNaCaixa: existe) {
                 item.estado = .gravado
                 item.partesEnviadas = 0

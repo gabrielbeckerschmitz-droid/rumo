@@ -6,26 +6,45 @@ import UIKit
 
 /// Gatilhos da sincronização (só a API; o B6 liga à UI e ao App):
 /// abrir o app, parar uma gravação e "Sincronizar agora" chamam `Sync.shared.run()`;
-/// a rede voltando e as tarefas de fundo são ligadas aqui.
+/// a rede voltando, o backoff e as tarefas de fundo são ligados aqui.
 extension Sync {
     static let idAtualizacao = "br.com.nortea.rumo.sync"
     static let idProcessamento = "br.com.nortea.rumo.process"
 
-    private final class TarefaDeFundo { var id = UIBackgroundTaskIdentifier.invalid }
+    private final class Caixinha {
+        var fundo = UIBackgroundTaskIdentifier.invalid
+        var trabalho: Task<Void, Never>?
+    }
     private static var monitor: NWPathMonitor?
+    private static var reexecucao: Task<Void, Never>?
 
     /// Sincroniza com o pareamento do Keychain e o contexto configurado. Sem pareamento ou contexto, não faz nada.
     /// Se o app for para segundo plano no meio do envio, pede tempo ao sistema para terminar o envio atual.
+    /// Se sobrar algo para tentar de novo, agenda uma única nova tentativa (backoff crescente).
     func run() async {
         guard !rodando, let contexto, let p = Keychain.load() else { return }
-        let tarefa = TarefaDeFundo()
-        tarefa.id = UIApplication.shared.beginBackgroundTask(withName: "rumo.sync") {
-            UIApplication.shared.endBackgroundTask(tarefa.id)
-            tarefa.id = .invalid
+        protegidosDisponiveis = { UIApplication.shared.isProtectedDataAvailable }
+        let caixa = Caixinha()
+        caixa.fundo = UIApplication.shared.beginBackgroundTask(withName: "rumo.sync") {
+            UIApplication.shared.endBackgroundTask(caixa.fundo)
+            caixa.fundo = .invalid
         }
         await run(store: contexto, client: GitHubClient(token: p.token, dono: p.dono, repo: p.repo),
                   chave: SymmetricKey(data: p.chave))
-        if tarefa.id != .invalid { UIApplication.shared.endBackgroundTask(tarefa.id) }
+        if caixa.fundo != .invalid { UIApplication.shared.endBackgroundTask(caixa.fundo) }
+        agendarReexecucao()
+    }
+
+    /// Uma só espera pendente: dorme até `proximaExecucao` (já limitada ao teto do backoff) e roda de novo.
+    private func agendarReexecucao() {
+        Sync.reexecucao?.cancel()
+        Sync.reexecucao = nil
+        guard let quando = proximaExecucao else { return }
+        Sync.reexecucao = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: UInt64(max(quando.timeIntervalSinceNow, 1) * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+            await Sync.shared.run()
+        }
     }
 
     /// Quando a internet volta (`.satisfied`), sincroniza.
@@ -44,24 +63,26 @@ extension Sync {
     func registrarTarefasDeFundo() {
         for id in [Sync.idAtualizacao, Sync.idProcessamento] {
             BGTaskScheduler.shared.register(forTaskWithIdentifier: id, using: nil) { tarefa in
-                Task { @MainActor in
+                let caixa = Caixinha()
+                tarefa.expirationHandler = { caixa.trabalho?.cancel() }  // antes de iniciar o trabalho
+                caixa.trabalho = Task { @MainActor in
                     Sync.shared.agendarFundo()  // já marca a próxima janela
-                    let trabalho = Task { @MainActor in await Sync.shared.run() }
-                    tarefa.expirationHandler = { trabalho.cancel() }
-                    await trabalho.value
-                    tarefa.setTaskCompleted(success: true)
+                    await Sync.shared.run()
+                    tarefa.setTaskCompleted(success: !Task.isCancelled)
                 }
             }
         }
     }
 
+    /// A janela do sistema nunca começa antes da próxima tentativa do backoff (o sistema decide o momento real).
     func agendarFundo() {
+        let minimo = proximaExecucao ?? Date(timeIntervalSinceNow: 15 * 60)
         let atualizacao = BGAppRefreshTaskRequest(identifier: Sync.idAtualizacao)
-        atualizacao.earliestBeginDate = Date(timeIntervalSinceNow: 15 * 60)
+        atualizacao.earliestBeginDate = max(minimo, Date(timeIntervalSinceNow: 15 * 60))
         let processamento = BGProcessingTaskRequest(identifier: Sync.idProcessamento)
         processamento.requiresNetworkConnectivity = true
         processamento.requiresExternalPower = false
-        processamento.earliestBeginDate = Date(timeIntervalSinceNow: 30 * 60)
+        processamento.earliestBeginDate = max(minimo, Date(timeIntervalSinceNow: 30 * 60))
         try? BGTaskScheduler.shared.submit(atualizacao)
         try? BGTaskScheduler.shared.submit(processamento)
     }
