@@ -1,0 +1,46 @@
+name: Rumo
+options:
+  bundleIdPrefix: br.com.nortea
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    SWIFT_STRICT_CONCURRENCY: minimal
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+targets:
+  Rumo:
+    type: application
+    platform: iOS
+    sources:
+      - path: Rumo
+        excludes:
+          - Resources/Info.plist
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: br.com.nortea.rumo
+        INFOPLIST_FILE: Rumo/Resources/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        TARGETED_DEVICE_FAMILY: "1"
+  RumoTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: RumoTests
+    dependencies:
+      - target: Rumo
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: br.com.nortea.rumo.tests
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  Rumo:
+    build:
+      targets:
+        Rumo: all
+        RumoTests: [test]
+    test:
+      targets:
+        - RumoTests

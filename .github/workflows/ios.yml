@@ -1,0 +1,38 @@
+name: iOS
+on: [push, workflow_dispatch]
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ferramentas
+        run: brew install xcodegen xcbeautify
+      - name: Gerar projeto
+        run: xcodegen
+      - name: Testes (simulador)
+        run: |
+          set -o pipefail
+          UDID=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; c=[x for k,v in d.items() if 'iOS' in k for x in v if x['name'].startswith('iPhone') and x['isAvailable']]; print(c[-1]['udid'])")
+          echo "Simulador: $UDID"
+          xcodebuild test -project Rumo.xcodeproj -scheme Rumo -destination "id=$UDID" \
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tee test.log | xcbeautify --renderer github-actions
+      - name: Resumo dos testes
+        if: always()
+        run: |
+          { echo "### Testes"; grep -E "Executed [0-9]+ tests?" test.log | tail -1 || echo "sem resultado"; } >> "$GITHUB_STEP_SUMMARY"
+      - name: Archive sem assinatura
+        run: |
+          set -o pipefail
+          xcodebuild archive -project Rumo.xcodeproj -scheme Rumo -destination 'generic/platform=iOS' \
+            -archivePath build/Rumo.xcarchive CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            2>&1 | xcbeautify --renderer github-actions
+      - name: Empacotar ipa
+        run: |
+          mkdir -p build/Payload
+          cp -R build/Rumo.xcarchive/Products/Applications/Rumo.app build/Payload/
+          (cd build && zip -qr Rumo.ipa Payload)
+          echo "ipa: $(du -h build/Rumo.ipa | cut -f1)" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Rumo-ipa
+          path: build/Rumo.ipa
