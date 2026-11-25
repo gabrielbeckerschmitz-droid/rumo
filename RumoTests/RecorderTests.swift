@@ -359,7 +359,9 @@ final class RecorderTests: XCTestCase {
         let caf = tmp.appendingPathComponent("\(UUID().uuidString).caf")
         let m4a = tmp.appendingPathComponent("\(UUID().uuidString).m4a")
         try CAFTeste.dados(segundos: 3, truncado: false).write(to: caf)
-        XCTAssertEqual(try Conversor.caf(caf, paraM4A: m4a), 3)
+        let r = try Conversor.caf(caf, paraM4A: m4a)
+        XCTAssertEqual(r.frames, 48_000)
+        XCTAssertEqual(r.segundos, 3, accuracy: 0.001)
         let f = try AVAudioFile(forReading: m4a)
         XCTAssertEqual(Double(f.length) / f.processingFormat.sampleRate, 3, accuracy: 0.3)
         XCTAssertEqual(f.fileFormat.sampleRate, 16_000)
@@ -371,7 +373,8 @@ final class RecorderTests: XCTestCase {
         let caf = tmp.appendingPathComponent("\(UUID().uuidString).caf")
         let m4a = tmp.appendingPathComponent("\(UUID().uuidString).m4a")
         try CAFTeste.dados(segundos: 4, truncado: true).write(to: caf)
-        XCTAssertEqual(try Conversor.caf(caf, paraM4A: m4a), 4)
+        let r = try Conversor.caf(caf, paraM4A: m4a)
+        XCTAssertEqual(r.frames, 64_000)
         let f = try AVAudioFile(forReading: m4a)
         XCTAssertEqual(Double(f.length) / f.processingFormat.sampleRate, 4, accuracy: 0.3)
     }
@@ -384,10 +387,10 @@ final class RecorderTests: XCTestCase {
         XCTAssertEqual(s[AVLinearPCMBitDepthKey] as? Int, 16)
         XCTAssertEqual(s[AVLinearPCMIsFloatKey] as? Bool, false)
         XCTAssertEqual(s[AVLinearPCMIsBigEndianKey] as? Bool, false)
-        XCTAssertEqual(Conversor.saida[AVFormatIDKey] as? Int, Int(kAudioFormatMPEG4AAC))
-        XCTAssertEqual(Conversor.saida[AVEncoderBitRateKey] as? Int, 24_000)
-        XCTAssertEqual(Conversor.saida[AVNumberOfChannelsKey] as? Int, 1)
-        XCTAssertEqual(Conversor.saida[AVSampleRateKey] as? Int, 16_000)
+        XCTAssertEqual(Conversor.saida(taxa: 16_000, canais: 1)[AVFormatIDKey] as? Int, Int(kAudioFormatMPEG4AAC))
+        XCTAssertEqual(Conversor.saida(taxa: 16_000, canais: 1)[AVEncoderBitRateKey] as? Int, 24_000)
+        XCTAssertEqual(Conversor.saida(taxa: 16_000, canais: 1)[AVNumberOfChannelsKey] as? Int, 1)
+        XCTAssertEqual(Conversor.saida(taxa: 16_000, canais: 1)[AVSampleRateKey] as? Int, 16_000)
     }
 
     func testLevelMappingAndMeters() throws {
@@ -411,6 +414,84 @@ final class RecorderTests: XCTestCase {
         let a = try AmbienteGravador()
         do { _ = try await a.recorder.stop(); XCTFail("deveria falhar") } catch {
             XCTAssertEqual(error.localizedDescription, "Não há gravação em andamento.")
+        }
+    }
+
+    // MARK: Rodada 2: gravação curta e erro de leitura
+
+    struct FalhaDeLeitura: Error {}
+
+    func testShortRecordingUnderHalfSecondIsKept() async throws {
+        let a = try AmbienteGravador()
+        a.engine.tempo = 0.3
+        try a.recorder.start(cofre: "Cofre A")
+        let item = try await a.recorder.stop()
+        XCTAssertEqual(try a.itens().count, 1, "gravação curta não é descartada")
+        XCTAssertEqual(item.duracaoS, 0)
+        XCTAssertEqual(try CAFTeste.duracaoM4A(a.m4a(item)), 0.3, accuracy: 0.3)
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: a.pasta.path), [])
+    }
+
+    func testShortLeftoverIsRecovered() async throws {
+        let a = try AmbienteGravador()
+        try a.sobra(segundos: 0.3, cofre: "Cofre A")
+        let n = await a.recorder.recuperarPendentes()
+        XCTAssertEqual(n, 1)
+        XCTAssertEqual(try a.itens().count, 1)
+    }
+
+    func testConversorFramesNaoSegundos() throws {
+        let tmp = FileManager.default.temporaryDirectory
+        let caf = tmp.appendingPathComponent("\(UUID().uuidString).caf")
+        let m4a = tmp.appendingPathComponent("\(UUID().uuidString).m4a")
+        try CAFTeste.dados(segundos: 0.3, truncado: true).write(to: caf)
+        let r = try Conversor.caf(caf, paraM4A: m4a)
+        XCTAssertEqual(r.frames, 4_800)
+    }
+
+    func testReadErrorKeepsCAFAndDoesNotCreateItem() async throws {
+        let a = try AmbienteGravador()
+        a.recorder.leituraCAF = { _, _ in throw FalhaDeLeitura() }  // a primeira leitura já falha
+        try a.recorder.start(cofre: "Cofre A")
+        let caf = try XCTUnwrap(a.engine.url)
+        let original = try Data(contentsOf: caf)
+        do { _ = try await a.recorder.stop(); XCTFail("deveria falhar") } catch {
+            XCTAssertEqual(error.localizedDescription, msgFalha)
+        }
+        XCTAssertEqual(try Data(contentsOf: caf), original, "o CAF fica quando a leitura falha")
+        XCTAssertEqual(try a.itens().count, 0)
+
+        a.recorder.leituraCAF = { try $0.read(into: $1) }  // leitura volta ao normal: a recuperação guarda
+        let n = await a.recorder.recuperarPendentes()
+        XCTAssertEqual(n, 1)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: caf.path))
+    }
+
+    func testMidFileReadErrorIsNotSilentlyTruncated() async throws {
+        let a = try AmbienteGravador()
+        a.engine.tempo = 3  // mais de um bloco de 16384 quadros
+        var chamadas = 0
+        a.recorder.leituraCAF = { arquivo, buffer in
+            chamadas += 1
+            if chamadas == 2 { throw FalhaDeLeitura() }  // erro no meio do arquivo
+            try arquivo.read(into: buffer)
+        }
+        try a.recorder.start(cofre: "Cofre A")
+        let caf = try XCTUnwrap(a.engine.url)
+        do { _ = try await a.recorder.stop(); XCTFail("deveria falhar") } catch {
+            XCTAssertEqual(error.localizedDescription, msgFalha)
+        }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: caf.path), "nada de cauda perdida e CAF apagado")
+        XCTAssertEqual(try a.itens().count, 0)
+    }
+
+    func testConversorRethrowsReadError() throws {
+        let tmp = FileManager.default.temporaryDirectory
+        let caf = tmp.appendingPathComponent("\(UUID().uuidString).caf")
+        try CAFTeste.dados(segundos: 1, truncado: false).write(to: caf)
+        XCTAssertThrowsError(try Conversor.caf(caf, paraM4A: tmp.appendingPathComponent("\(UUID().uuidString).m4a"),
+                                              leitura: { _, _ in throw FalhaDeLeitura() })) { erro in
+            XCTAssertTrue(erro is FalhaDeLeitura)
         }
     }
 }
