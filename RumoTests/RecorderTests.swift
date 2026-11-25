@@ -390,7 +390,7 @@ final class RecorderTests: XCTestCase {
         XCTAssertEqual(Conversor.saida(taxa: 16_000, canais: 1)[AVFormatIDKey] as? Int, Int(kAudioFormatMPEG4AAC))
         XCTAssertEqual(Conversor.saida(taxa: 16_000, canais: 1)[AVEncoderBitRateKey] as? Int, 24_000)
         XCTAssertEqual(Conversor.saida(taxa: 16_000, canais: 1)[AVNumberOfChannelsKey] as? Int, 1)
-        XCTAssertEqual(Conversor.saida(taxa: 16_000, canais: 1)[AVSampleRateKey] as? Int, 16_000)
+        XCTAssertEqual(Conversor.saida(taxa: 16_000, canais: 1)[AVSampleRateKey] as? Double, 16_000.0)
     }
 
     func testLevelMappingAndMeters() throws {
