@@ -263,6 +263,12 @@ final class Recorder: ObservableObject {
         return item
     }
 
+    /// Para o encerramento do app (willTerminate): fecha e guarda de forma síncrona, se houver gravação.
+    func encerrarSeGravando() {
+        guard gravando else { return }
+        _ = try? finalizar()
+    }
+
     private func aoInterromper() async {
         guard gravando else { return }
         do { _ = try finalizar() } catch { ultimoErro = error.localizedDescription }
@@ -309,8 +315,7 @@ final class Recorder: ObservableObject {
             let blob = try Crypto.seal(try Data(contentsOf: m4a), key: k)
             registrarPasso("cifrou")
 
-            let destino = try raiz().appendingPathComponent("fila")
-            try fm.createDirectory(at: destino, withIntermediateDirectories: true, attributes: Self.protegido())
+            try Fila.garantirPasta(base: try raiz())  // cria protegida e fora do backup
             let relativo = Fila.caminhoRelativo(notaId)
             // completeUntilFirstUserAuthentication (não .complete): o sync em segundo plano lê com o telefone bloqueado.
             try blob.write(to: Fila.url(relativo, base: try raiz()), options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])

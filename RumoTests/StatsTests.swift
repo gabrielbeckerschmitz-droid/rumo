@@ -73,3 +73,18 @@ final class StatsTests: XCTestCase {
         XCTAssertEqual(Stats.saudacao(hora: 2, nome: ""), "Boa noite")
     }
 }
+
+final class FormatoTests: XCTestCase {
+    func testDuracao() {
+        XCTAssertEqual(Stats.duracao(0), "0s")
+        XCTAssertEqual(Stats.duracao(45), "45s")
+        XCTAssertEqual(Stats.duracao(120), "2min")
+        XCTAssertEqual(Stats.duracao(192), "3min12s")
+    }
+
+    func testCronometro() {
+        XCTAssertEqual(Stats.cronometro(0), "00:00")
+        XCTAssertEqual(Stats.cronometro(192.9), "03:12")
+        XCTAssertEqual(Stats.cronometro(3792), "1:03:12")
+    }
+}

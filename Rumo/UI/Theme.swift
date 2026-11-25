@@ -54,15 +54,15 @@ enum Theme {
 
 extension Font {
     /// Red Hat Display: 700 (bold) ou 800 (heavy e acima).
-    static func display(_ size: CGFloat, _ weight: Font.Weight = .bold) -> Font {
+    static func display(_ size: CGFloat, _ weight: Font.Weight = .bold, relativeTo estilo: Font.TextStyle = .body) -> Font {
         let heavy = weight == .heavy || weight == .black
-        return .custom(heavy ? "RedHatDisplay-ExtraBold" : "RedHatDisplay-Bold", size: size)
+        return .custom(heavy ? "RedHatDisplay-ExtraBold" : "RedHatDisplay-Bold", size: size, relativeTo: estilo)
     }
 
     /// Red Hat Text: 400 (regular) ou 500 (medium e acima).
-    static func text(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
+    static func text(_ size: CGFloat, _ weight: Font.Weight = .regular, relativeTo estilo: Font.TextStyle = .body) -> Font {
         let medium = weight == .medium || weight == .semibold || weight == .bold || weight == .heavy || weight == .black
-        return .custom(medium ? "RedHatText-Medium" : "RedHatText-Regular", size: size)
+        return .custom(medium ? "RedHatText-Medium" : "RedHatText-Regular", size: size, relativeTo: estilo)
     }
 }
 

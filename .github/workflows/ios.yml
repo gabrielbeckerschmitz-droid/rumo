@@ -7,6 +7,12 @@ jobs:
       - uses: actions/checkout@v4
       - name: Ferramentas
         run: brew install xcodegen xcbeautify
+      - name: Imports só da SDK da Apple
+        run: |
+          grep -rhoE '^import \w+' Rumo | sort -u | tee imports.txt
+          ruim=$(sed 's/import //' imports.txt | grep -vxE 'SwiftUI|Foundation|CryptoKit|AVFoundation|LocalAuthentication|SwiftData|BackgroundTasks|Network|Security|UIKit|Combine|Observation' || true)
+          { echo "### Imports"; tr '\n' ' ' < imports.txt; } >> "$GITHUB_STEP_SUMMARY"
+          if [ -n "$ruim" ]; then echo "Import fora da lista: $ruim"; exit 1; fi
       - name: Gerar projeto
         run: xcodegen
       - name: Testes (simulador)
