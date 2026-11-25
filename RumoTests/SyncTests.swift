@@ -14,6 +14,7 @@ final class FakeGitHub: URLProtocol {
     static var arquivos: [String: Data] = [:]
     static var putsEmOrdem: [String] = []
     static var numeroDePuts = 0
+    static var gets: [String] = []
     static var cabecalhosDoUltimoPut: [String: String]?
     /// (método, caminho, nº do PUT) -> falha a simular nesta chamada.
     static var falha: ((String, String, Int) -> Falha?)?
@@ -21,7 +22,7 @@ final class FakeGitHub: URLProtocol {
 
     static func reiniciar() {
         trava.lock(); defer { trava.unlock() }
-        arquivos = [:]; putsEmOrdem = []; numeroDePuts = 0; cabecalhosDoUltimoPut = nil; falha = nil; aoApagar = nil
+        arquivos = [:]; putsEmOrdem = []; gets = []; numeroDePuts = 0; cabecalhosDoUltimoPut = nil; falha = nil; aoApagar = nil
     }
 
     override class func canInit(with request: URLRequest) -> Bool { true }
@@ -86,6 +87,7 @@ final class FakeGitHub: URLProtocol {
             arquivos[caminho] = nil
             return (200, json([:]), false)
         default:  // GET
+            gets.append(caminho)
             if let dados = arquivos[caminho] {
                 return (200, (req.value(forHTTPHeaderField: "Accept") ?? "").contains("raw") ? dados : json(["path": caminho]), false)
             }
@@ -439,7 +441,7 @@ final class SyncTests: XCTestCase {
 
         let rel = await a.rodar()
         XCTAssertEqual(rel.pedidosEnviados, 2)
-        XCTAssertTrue(primeiro.enviado && segundo.enviado)
+        XCTAssertEqual(try a.ctx.fetchCount(FetchDescriptor<Pedido>()), 0, "pedido enviado é apagado (o blob não fica no banco)")
         let destinos: [String] = try FakeGitHub.putsEmOrdem.map {
             guard case .mover(let m) = try a.abrir($0).corpo else { throw CryptoError() }
             return m.destino
@@ -487,5 +489,146 @@ final class SyncTests: XCTestCase {
         let (r1, r2) = await (primeiro, segundo)
         XCTAssertEqual(r1.enviados + r2.enviados, 1)
         XCTAssertEqual(a.inbox().count, 1, "duas chamadas juntas não duplicam o envio")
+    }
+}
+
+// MARK: - Rodada de correções B4
+
+@MainActor
+final class SyncCorrecoesTests: XCTestCase {
+    func testUnreadableFileIsSkippedThenSentLater() async throws {
+        let a = try Ambiente()
+        let i = try a.item(audio: Data(repeating: 1, count: 20))
+        let url = try a.arquivo(i)
+        let guardado = try Data(contentsOf: url)
+        try FileManager.default.removeItem(at: url)  // ilegível agora (celular bloqueado, caminho mudou...)
+        let outro = try a.item(texto: "segue", criadoEm: Date(timeIntervalSince1970: 1_799_990_100))
+
+        let rel = await a.rodar()
+        XCTAssertEqual(i.estado, .gravado, "falha de leitura não vira erro")
+        XCTAssertNil(i.erroTexto)
+        XCTAssertEqual(outro.estado, .enviado, "os outros itens seguem")
+        XCTAssertNil(rel.erro)
+        XCTAssertEqual(a.inbox().count, 1)
+
+        try guardado.write(to: url)  // legível de novo
+        _ = await a.rodar(agora.addingTimeInterval(60))
+        XCTAssertEqual(i.estado, .enviado)
+        XCTAssertEqual(a.inbox().count, 2)
+    }
+
+    func testProtectedDataUnavailableSkipsItem() async throws {
+        let a = try Ambiente()
+        let i = try a.item(audio: Data(repeating: 1, count: 20))
+        a.sync.protegidosDisponiveis = { false }
+        _ = await a.rodar()
+        XCTAssertEqual(i.estado, .gravado)
+        XCTAssertTrue(a.inbox().isEmpty)
+        a.sync.protegidosDisponiveis = { true }
+        _ = await a.rodar(agora.addingTimeInterval(60))
+        XCTAssertEqual(i.estado, .enviado)
+    }
+
+    func testWrongKeyKeepsStateWithMessage() async throws {
+        let a = try Ambiente()
+        let i = try a.item(audio: Data(repeating: 1, count: 20))
+        let outraChave = SymmetricKey(data: Data(repeating: 9, count: 32))
+        try Crypto.seal(Data(repeating: 1, count: 20), key: outraChave).write(to: try a.arquivo(i))
+        _ = await a.rodar()
+        XCTAssertEqual(i.estado, .gravado)
+        XCTAssertEqual(i.erroTexto, "Não consegui abrir esta gravação com a chave atual — ela foi feita antes de um novo pareamento?")
+        XCTAssertTrue(a.inbox().isEmpty)
+        XCTAssertNotNil(i.arquivoCifrado)
+    }
+
+    func testEmptyRecordingIsNotUploaded() async throws {
+        let a = try Ambiente()
+        let i = try a.item(audio: Data())
+        _ = await a.rodar()
+        XCTAssertEqual(i.erroTexto, "Gravação vazia.")
+        XCTAssertEqual(i.estado, .gravado)
+        XCTAssertTrue(a.inbox().isEmpty)
+    }
+
+    func testNextWakeDate() {
+        let h: TimeInterval = 3600
+        XCTAssertNil(Sync.proximoDespertar([], agora: agora))
+        XCTAssertEqual(Sync.proximoDespertar([agora.addingTimeInterval(600), agora.addingTimeInterval(60)], agora: agora), agora.addingTimeInterval(60))
+        XCTAssertEqual(Sync.proximoDespertar([agora.addingTimeInterval(-500)], agora: agora), agora.addingTimeInterval(5), "data vencida: logo, mas não em laço")
+        XCTAssertEqual(Sync.proximoDespertar([agora.addingTimeInterval(10 * h)], agora: agora), agora.addingTimeInterval(h), "limitado ao teto do backoff")
+    }
+
+    func testRunExposesNextWakeAfterFailure() async throws {
+        let a = try Ambiente()
+        try a.item(audio: Data(repeating: 1, count: 20))
+        FakeGitHub.falha = { _, _, _ in .rede }
+        _ = await a.rodar()
+        XCTAssertEqual(a.sync.proximaExecucao, agora.addingTimeInterval(30))
+        FakeGitHub.falha = nil
+        _ = await a.rodar(agora.addingTimeInterval(60))
+        XCTAssertNil(a.sync.proximaExecucao)
+    }
+
+    func testGithubErrorTextIsTruthful() {
+        let t = GitHubErro.github(500).errorDescription ?? ""
+        XCTAssertTrue(t.contains("500"))
+        XCTAssertFalse(t.contains("sozinho"))
+    }
+
+    func testResultsAppliedInTimeOrderNotListingOrder() async throws {
+        let a = try Ambiente()
+        let i = try a.item(audio: Data(repeating: 2, count: 10), estado: .enviado)
+        i.enviadoEm = agora.addingTimeInterval(-3600)
+        i.caminhosInbox = ["inbox/ainda.bin"]
+        FakeGitHub.arquivos["inbox/ainda.bin"] = Data([1])
+        let t1 = agora.addingTimeInterval(-900)
+        try a.colocar(a.resultado(i.notaId, quando: t1.addingTimeInterval(300), titulo: "Novo"), em: "outbox/a.bin")  // lista primeiro
+        try a.colocar(a.resultado(i.notaId, quando: t1, titulo: "Velho"), em: "outbox/b.bin")
+        _ = await a.rodar()
+        XCTAssertEqual(i.titulo, "Novo", "vale o resultado mais recente, não o primeiro da lista")
+        XCTAssertEqual(i.processadoEm, t1)
+        XCTAssertTrue(a.outbox().isEmpty)
+    }
+
+    func testSendFailureStillReceivesResults() async throws {
+        let a = try Ambiente()
+        try a.item(audio: Data(repeating: 1, count: 20))
+        let outra = try a.item(audio: Data(repeating: 2, count: 10), estado: .enviado, criadoEm: Date(timeIntervalSince1970: 1_799_000_000))
+        outra.enviadoEm = agora.addingTimeInterval(-3600)
+        outra.caminhosInbox = ["inbox/ainda.bin"]
+        FakeGitHub.arquivos["inbox/ainda.bin"] = Data([1])
+        try a.colocar(a.resultado(outra.notaId, quando: agora), em: "outbox/r.bin")
+        FakeGitHub.falha = { metodo, _, _ in metodo == "PUT" ? .status(500) : nil }
+        let rel = await a.rodar()
+        XCTAssertEqual(outra.estado, .processado, "falha no envio não impede receber")
+        XCTAssertNotNil(rel.erro)
+    }
+
+    func testTokenFailureStopsEverything() async throws {
+        let a = try Ambiente()
+        try a.item(audio: Data(repeating: 1, count: 20))
+        FakeGitHub.falha = { _, _, _ in .status(401) }
+        _ = await a.rodar()
+        XCTAssertTrue(FakeGitHub.gets.isEmpty)
+    }
+
+    func testResendListsInboxOnlyOnce() async throws {
+        let a = try Ambiente()
+        for k in 0..<3 {
+            let i = try a.item(audio: Data(repeating: 3, count: 10), estado: .enviado, criadoEm: Date(timeIntervalSince1970: 1_799_000_000 + Double(k)))
+            i.enviadoEm = agora.addingTimeInterval(-25 * 3600)
+            i.caminhosInbox = ["inbox/s\(k)a.bin", "inbox/s\(k)b.bin"]
+        }
+        let rel = await a.rodar()
+        XCTAssertEqual(rel.reenviados, 3)
+        XCTAssertEqual(FakeGitHub.gets.filter { $0 == "inbox" }.count, 1, "uma listagem da inbox por rodada")
+    }
+
+    func testExcludedFromBackup() throws {
+        let a = try Ambiente()
+        let url = a.tmp.appendingPathComponent("destinos.json")
+        let d = Destinos(cofres: [Cofre(nome: "Cofre A", cliente: false)], atualizadoEm: Instante(agora))
+        try Destinos.salvarLocal(d, em: url)
+        XCTAssertEqual(try url.resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup, true)
     }
 }
