@@ -68,39 +68,46 @@ final class AVAudioEngineRecorder: AudioEngineProtocol {
     var currentTime: TimeInterval { recorder?.currentTime ?? 0 }
 }
 
-/// Converte o CAF (PCM) em .m4a (AAC mono 16 kHz 24 kbps) em blocos, sem carregar tudo na memória.
+/// Converte o CAF (PCM) em .m4a (AAC 24 kbps, mesma taxa e canais da entrada) em blocos, sem carregar tudo na memória.
 enum Conversor {
     struct SemAudio: Error {}
+    struct Resultado: Equatable {
+        let frames: Int
+        let taxa: Double
+        var segundos: Double { taxa > 0 ? Double(frames) / taxa : 0 }
+    }
 
-    static let saida: [String: Any] = [
-        AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
-        AVSampleRateKey: 16_000,
-        AVNumberOfChannelsKey: 1,
-        AVEncoderBitRateKey: 24_000,
-    ]
+    static func saida(taxa: Double, canais: Int) -> [String: Any] {
+        [AVFormatIDKey: Int(kAudioFormatMPEG4AAC), AVSampleRateKey: taxa, AVNumberOfChannelsKey: canais, AVEncoderBitRateKey: 24_000]
+    }
 
-    /// Devolve a duração em segundos, contada pelos quadros realmente lidos (um CAF truncado também funciona).
+    /// Devolve os QUADROS realmente lidos (um CAF truncado também funciona; um clipe curto não vira 0).
+    /// Só o fim do arquivo encerra a leitura: qualquer outro erro é relançado e o CAF fica intacto.
     @discardableResult
-    static func caf(_ origem: URL, paraM4A destino: URL) throws -> Int {
+    static func caf(_ origem: URL, paraM4A destino: URL,
+                    leitura: (AVAudioFile, AVAudioPCMBuffer) throws -> Void = { try $0.read(into: $1) }) throws -> Resultado {
         try? FileManager.default.removeItem(at: destino)
         let entrada = try AVAudioFile(forReading: origem)
         let formato = entrada.processingFormat
         guard let buffer = AVAudioPCMBuffer(pcmFormat: formato, frameCapacity: 16_384) else { throw SemAudio() }
-        var total: AVAudioFramePosition = 0
+        var total = 0
         do {
             // O arquivo de saída só é finalizado quando o objeto some: por isso fica dentro deste bloco.
-            let arquivo = try AVAudioFile(forWriting: destino, settings: saida,
+            let arquivo = try AVAudioFile(forWriting: destino, settings: saida(taxa: formato.sampleRate, canais: Int(formato.channelCount)),
                                           commonFormat: formato.commonFormat, interleaved: formato.isInterleaved)
             while true {
                 buffer.frameLength = 0
-                do { try entrada.read(into: buffer) } catch { break }  // fim do arquivo
+                do { try leitura(entrada, buffer) } catch {
+                    if entrada.framePosition >= entrada.length { break }  // fim do arquivo
+                    throw error
+                }
                 if buffer.frameLength == 0 { break }
                 try arquivo.write(from: buffer)
-                total += AVAudioFramePosition(buffer.frameLength)
+                total += Int(buffer.frameLength)
             }
         }
         guard total > 0 else { throw SemAudio() }
-        return Int((Double(total) / formato.sampleRate).rounded())
+        return Resultado(frames: total, taxa: formato.sampleRate)
     }
 }
 
@@ -132,6 +139,8 @@ final class Recorder: ObservableObject {
     var gatilhoSync: () -> Void = { Task { @MainActor in await Sync.shared.run() } }
     /// Gancho de teste: nome de cada passo do `stop()`.
     var registrarPasso: (String) -> Void = { _ in }
+    /// Leitura de um bloco do CAF (gancho de teste para simular erro de leitura).
+    var leituraCAF: (AVAudioFile, AVAudioPCMBuffer) throws -> Void = { try $0.read(into: $1) }
     /// Tarefa da última interrupção tratada (os testes aguardam por ela).
     var tarefaInterrupcao: Task<Void, Never>? { caixa.tarefa }
     private let caixa = CaixaTarefa()
@@ -291,11 +300,12 @@ final class Recorder: ObservableObject {
         do {
             guard let k = chave() else { throw Erro(Self.msgSemPareamento) }
             let m4a = caminho(pasta, notaId, "m4a")
-            let frames: Int
-            do { frames = try Conversor.caf(caf, paraM4A: m4a) } catch is Conversor.SemAudio { frames = 0 }
+            let frames: Int, segundos: Double
+            do { let r = try Conversor.caf(caf, paraM4A: m4a, leitura: leituraCAF); frames = r.frames; segundos = r.segundos }
+            catch is Conversor.SemAudio { frames = 0; segundos = 0 }
             if frames == 0 { limpar(pasta, notaId); throw Erro(Self.msgVazia) }  // nada gravado: não há o que perder
             registrarPasso("convertido")
-            let duracaoS = frames  // contada pelos quadros lidos; vale também para o CAF truncado
+            let duracaoS = Int(segundos.rounded())  // dos quadros lidos; vale também para o CAF truncado
             let blob = try Crypto.seal(try Data(contentsOf: m4a), key: k)
             registrarPasso("cifrou")
 
