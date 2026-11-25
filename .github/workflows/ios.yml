@@ -15,7 +15,7 @@ jobs:
           UDID=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; c=[x for k,v in d.items() if 'iOS' in k for x in v if x['name'].startswith('iPhone') and x['isAvailable']]; print(c[-1]['udid'])")
           echo "Simulador: $UDID"
           xcodebuild test -project Rumo.xcodeproj -scheme Rumo -destination "id=$UDID" \
-            CODE_SIGNING_ALLOWED=NO 2>&1 | tee test.log | xcbeautify --renderer github-actions
+            CODE_SIGN_IDENTITY="-" CODE_SIGNING_ALLOWED=YES CODE_SIGNING_REQUIRED=NO 2>&1 | tee test.log | xcbeautify --renderer github-actions
       - name: Resumo dos testes
         if: always()
         run: |
