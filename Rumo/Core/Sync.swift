@@ -21,6 +21,8 @@ final class Sync {
 
     var tamanhoParte = GitHubClient.tamanhoParte
     var destinosURL = Destinos.arquivoPadrao
+    /// Pasta-base dos caminhos relativos de `Item.arquivoCifrado` (Application Support do container atual).
+    var baseFila = Fila.base
     var defaults = UserDefaults.standard
     /// Contexto do app (configurado em B6); usado por `run()` sem argumentos.
     var contexto: ModelContext?
@@ -111,7 +113,7 @@ final class Sync {
             item.caminhosInbox += [caminho]
             item.partesEnviadas = 1
         } else {
-            guard let url = item.arquivoCifrado, let blob = try? Data(contentsOf: url), let m4a = try? Crypto.open(blob, key: chave) else {
+            guard let rel = item.arquivoCifrado, let blob = try? Data(contentsOf: Fila.url(rel, base: baseFila)), let m4a = try? Crypto.open(blob, key: chave) else {
                 item.estado = .erro
                 item.erroTexto = "Não foi possível abrir esta gravação neste iPhone (arquivo ausente ou chave diferente)."
                 try? store.save()
@@ -213,7 +215,7 @@ final class Sync {
         let dias = (defaults.object(forKey: "retencaoDias") as? Int) ?? 30
         var apagados = 0
         for item in itens(store) where item.arquivoCifrado != nil && Store.podeApagarAudio(item, agora: now, retencaoDias: dias) {
-            if let url = item.arquivoCifrado, FileManager.default.fileExists(atPath: url.path) {
+            if let rel = item.arquivoCifrado, case let url = Fila.url(rel, base: baseFila), FileManager.default.fileExists(atPath: url.path) {
                 do { try FileManager.default.removeItem(at: url) } catch { continue }
             }
             item.arquivoCifrado = nil

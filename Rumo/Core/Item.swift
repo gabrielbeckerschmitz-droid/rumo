@@ -22,7 +22,8 @@ final class Item {
     var criadoEm: Date
     var duracaoS: Int
     var estado: Estado
-    var arquivoCifrado: URL?
+    /// Caminho RELATIVO a Application Support (ex.: "fila/<uuid>.bin"); resolva com `Fila.url(_:base:)`.
+    var arquivoCifrado: String?
     var enviadoEm: Date?
     var processadoEm: Date?
     var titulo: String?

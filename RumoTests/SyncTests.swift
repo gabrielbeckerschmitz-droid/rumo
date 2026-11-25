@@ -122,6 +122,7 @@ struct Ambiente {
         client = GitHubClient(token: "tok-teste", dono: "dono", repo: "caixa", session: URLSession(configuration: cfg))
         sync = Sync()
         sync.destinosURL = tmp.appendingPathComponent("destinos.json")
+        sync.baseFila = tmp
         sync.defaults = UserDefaults(suiteName: "rumo.testes.\(UUID().uuidString)")!
     }
 
@@ -131,15 +132,17 @@ struct Ambiente {
               criadoEm: Date = Date(timeIntervalSince1970: 1_799_990_000), duracaoS: Int = 42) throws -> Item {
         let i = Item(notaId: UUID(), cofre: "Cofre A", criadoEm: criadoEm, duracaoS: duracaoS, estado: estado)
         if let audio {
-            let url = tmp.appendingPathComponent("\(i.notaId.uuidString).bin")
-            try Crypto.seal(audio, key: chave).write(to: url)
-            i.arquivoCifrado = url
+            let rel = "\(i.notaId.uuidString).bin"  // relativo à base da fila (aqui, tmp)
+            try Crypto.seal(audio, key: chave).write(to: tmp.appendingPathComponent(rel))
+            i.arquivoCifrado = rel
         }
         i.texto = texto
         ctx.insert(i)
         try ctx.save()
         return i
     }
+
+    func arquivo(_ i: Item) throws -> URL { Fila.url(try XCTUnwrap(i.arquivoCifrado), base: tmp) }
 
     func rodar(_ now: Date = agora) async -> SyncReport {
         await sync.run(store: ctx, client: client, chave: chave, now: now)
@@ -212,7 +215,7 @@ final class SyncTests: XCTestCase {
         XCTAssertEqual(i.proximaTentativa, agora.addingTimeInterval(Backoff.proxima(tentativas: 0)))
         XCTAssertTrue(rel.semInternet)
         XCTAssertNil(a.sync.ultimoErro)
-        XCTAssertTrue(FileManager.default.fileExists(atPath: try XCTUnwrap(i.arquivoCifrado).path), "a gravação nunca sai do disco")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: try a.arquivo(i).path), "a gravação nunca sai do disco")
 
         FakeGitHub.falha = nil  // a internet volta: sai sozinha
         _ = await a.rodar(agora.addingTimeInterval(60))
@@ -314,7 +317,7 @@ final class SyncTests: XCTestCase {
         XCTAssertEqual(rel.erro, msgToken)
         XCTAssertEqual(i.estado, .gravado, "token vencido não vira erro da gravação")
         XCTAssertNil(i.erroTexto)
-        XCTAssertTrue(FileManager.default.fileExists(atPath: try XCTUnwrap(i.arquivoCifrado).path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: try a.arquivo(i).path))
 
         FakeGitHub.falha = nil  // token renovado: envia
         _ = await a.rodar(agora.addingTimeInterval(60))
@@ -406,7 +409,7 @@ final class SyncTests: XCTestCase {
         enviado.enviadoEm = agora.addingTimeInterval(-100 * dia)
         enviado.caminhosInbox = ["inbox/ainda.bin"]
         FakeGitHub.arquivos["inbox/ainda.bin"] = Data([1])
-        let arquivoVelho = try XCTUnwrap(velho.arquivoCifrado)
+        let arquivoVelho = try a.arquivo(velho)
 
         let rel = await a.rodar()
         XCTAssertEqual(rel.audiosApagados, 1)
