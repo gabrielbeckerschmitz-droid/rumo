@@ -301,7 +301,6 @@ final class Recorder: ObservableObject {
 
     /// Converte o CAF, cifra para a fila, cria o Item e só então apaga os temporários. Em qualquer falha, o CAF fica.
     private func guardar(caf: URL, notaId: UUID, cofre: String, criadoEm: Date) throws -> Item {
-        let fm = FileManager.default
         let pasta = caf.deletingLastPathComponent()
         do {
             guard let k = chave() else { throw Erro(Self.msgSemPareamento) }

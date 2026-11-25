@@ -11,7 +11,7 @@ final class StatsTests: XCTestCase {
 
     private func d(_ s: String) -> Date { ISO8601DateFormatter().date(from: s)! }
 
-    private func item(_ quando: String, _ cofre: String = "Cofre A", dur: Int = 60, _ estado: Estado = .processado) -> Item {
+    private func item(_ quando: String, _ cofre: String = "Cofre A", dur: Int = 60, estado: Estado = .processado) -> Item {
         Item(notaId: UUID(), cofre: cofre, criadoEm: d(quando), duracaoS: dur, estado: estado)
     }
 
@@ -20,10 +20,10 @@ final class StatsTests: XCTestCase {
         let itens = [
             item("2026-11-22T23:30:00Z"),                                // domingo da semana passada
             item("2026-11-18T10:00:00Z"),                                // semana passada
-            item("2026-11-23T00:00:00Z", dur: 120, .gravado),            // segunda 00:00 (conta)
+            item("2026-11-23T00:00:00Z", dur: 120, estado: .gravado),            // segunda 00:00 (conta)
             item("2026-11-23T10:00:00Z", dur: 180),
-            item("2026-11-25T09:00:00Z", "Cofre B", .enviado),
-            item("2026-11-29T23:59:00Z", .erro),                         // domingo (conta)
+            item("2026-11-25T09:00:00Z", "Cofre B", estado: .enviado),
+            item("2026-11-29T23:59:00Z", estado: .erro),                         // domingo (conta)
             item("2026-11-30T00:00:00Z", dur: 600),                      // próxima semana (não conta)
         ]
         let s = Stats.semana(itens: itens, hoje: d("2026-11-25T12:00:00Z"), calendario: cal)
@@ -32,16 +32,16 @@ final class StatsTests: XCTestCase {
         XCTAssertEqual(s.minutos, 7)            // 120 + 180 + 60 + 60 = 420 s
         XCTAssertEqual(s.fila, 3)               // gravado + enviado + erro (todos os itens, não só a semana)
         XCTAssertEqual(s.deltaSemanaPassada, 2) // 4 nesta, 2 na passada
-        XCTAssertEqual(s.porCofre.map(\.0), ["Cofre A", "Cofre B"])
-        XCTAssertEqual(s.porCofre.map(\.1), [3, 1])
+        XCTAssertEqual(s.porCofre.map { $0.0 }, ["Cofre A", "Cofre B"])
+        XCTAssertEqual(s.porCofre.map { $0.1 }, [3, 1])
     }
 
     func testPorCofreUsesDestinationNotCitations() {
         let i = item("2026-11-24T10:00:00Z", "Cofre A")
         i.clienteSugerido = "Cofre B"  // citado na fala, mas o destino é o A
         let s = Stats.semana(itens: [i], hoje: d("2026-11-25T12:00:00Z"), calendario: cal)
-        XCTAssertEqual(s.porCofre.map(\.0), ["Cofre A"])
-        XCTAssertEqual(s.porCofre.map(\.1), [1])
+        XCTAssertEqual(s.porCofre.map { $0.0 }, ["Cofre A"])
+        XCTAssertEqual(s.porCofre.map { $0.1 }, [1])
     }
 
     func testWeekStartsOnMondayWhenTodayIsSunday() {
