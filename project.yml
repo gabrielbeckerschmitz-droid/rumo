@@ -29,6 +29,10 @@ targets:
     platform: iOS
     sources:
       - path: RumoTests
+        excludes:
+          - vectors.json
+      - path: RumoTests/vectors.json
+        buildPhase: resources
     dependencies:
       - target: Rumo
     settings:

@@ -1,0 +1,64 @@
+{
+  "crypto": [
+    {
+      "key_b64": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+      "nonce_b64": "ZGVmZ2hpamtsbW5v",
+      "plaintext_b64": "",
+      "blob_b64": "ZGVmZ2hpamtsbW5vYJvVD2rXbfZl8Ei6jF/XBg=="
+    },
+    {
+      "key_b64": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+      "nonce_b64": "AQIDBAUGBwgJCgsM",
+      "plaintext_b64": "aGVsbG8gcnVtbw==",
+      "blob_b64": "AQIDBAUGBwgJCgsMbY82uYO0gvMhzZr+PawQNc4hhdFNE2RvjwQ="
+    },
+    {
+      "key_b64": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+      "nonce_b64": "yMnKy8zNzs/Q0dLT",
+      "plaintext_b64": "aWRlaWEgZGUgYcOnw6NvLCDDqSBpc3Nv",
+      "blob_b64": "yMnKy8zNzs/Q0dLTeBwEsufsn0VUXdwZ3aWEOMBERYhtGNtLEkQ194KombrM92OhBxf9TQ=="
+    }
+  ],
+  "messages": [
+    {
+      "key_b64": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+      "blob_b64": "AQEBAQEBAQEBAQEBDOGTF1KlWUr0dg58Ol1y+vtev+uhsybs3us33K0kygGc5k931qZqHmgSx+8Clb5Au9R4PWzToTueBE1fo03UumdNepinF/lf0xBwZwXaEOLNkbqjV/VtFcBw6IPJEnKxsehL+d7NzsWIn9b6bS5bfEIx1JihNgYdwFDA8B56RzXdhfgIGTN5h8lI0aYbnk69tbWyqLzvmJ++dgV06EqMIXEwozWD8WXSCmW6GwaKVSZYgj4eFL6uw/sLu/6luttuBVE8/SsrCNY7uFb/lm3awi6l+P7NObJobQU3r5uAxkxYoJN2Mh18Xy6uaXbcbW1KwCh7zHuglprma0ToyOumbuJE8g==",
+      "json": "{\"v\": 1, \"id\": \"00000000-0000-4000-8000-000000000100\", \"criado_em\": \"2026-01-15T10:30:00-03:00\", \"tipo_msg\": \"nota_audio\", \"nota_id\": \"00000000-0000-4000-8000-000000000001\", \"cofre\": \"Cofre A\", \"audio\": \"YXVkaW8gc2ludGV0aWNv\", \"duracao_s\": 42}"
+    },
+    {
+      "key_b64": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+      "blob_b64": "AgICAgICAgICAgIC4ApvmYP5AHfrp8ucEUP6MSzZn1ykZEjBb27hM0dGffLgyPVaLwbD9elasoHayH6oQug8rGSF+EZvoCPTeXYxMbHhaU0dGG+j3JA99mEPP7LMhrWEkv+O1xqNkpWTuQqFYb14uFhXKmzRzHO13Fs9jXkbnuNnTjaDxsiBU3ObII1DJBKzmttO0TlG2MhifICRMydpEQ9V/Ui4puzgOGBR6zo1f4oSRrJLAiF011PDBm400qTMLRneX4TXzsOZt0xDAUAYpAuowTYfF0EbzpSkLdT2u1xr/SSCEUttB+NCEYWvL4MthbDF1uKoU63nFSoNnsGEpkfX4gbnCRTtmSyeGBABWWZdzNgShuQ2Olm1i7HOA4vSWFa/8ZvKmwW8wuLjvNjgBrUqN91h",
+      "json": "{\"v\": 1, \"id\": \"00000000-0000-4000-8000-000000000101\", \"criado_em\": \"2026-01-15T10:30:00-03:00\", \"tipo_msg\": \"nota_audio_parte\", \"nota_id\": \"00000000-0000-4000-8000-000000000002\", \"cofre\": \"Cofre A\", \"parte\": 1, \"total_partes\": 2, \"audio\": \"YXVkaW8gc2ludGV0aWNv\", \"duracao_s\": 600}"
+    },
+    {
+      "key_b64": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+      "blob_b64": "AwMDAwMDAwMDAwMDlWlK9DGyYzr+f28a75B0JSpmxsDqyAyBr412LTQPnWKrMxHmlbdHyHibdD5bew0qw+dHnomOZohdjyVw44CjPyrovoh27BSwZuZ0fuVpcTCf5IuzarZzjSNDC0sT/h3Kn8XNy9vImO5+JCYRtMCr5AeWu0Gx2fSGklESPZdICbaMcJLZV2L3uXJJ4+gyWTDQbsW/kD2n6lHkazT4GW8T3FbyS7hu9zf3BqcWO7xL7sN8R8e5twH6RVAgfKb5UaMfTUdeyoetzezT42NJiv7BXpjXDxJco5hn5lrqcuEiI/7ULJzHmaHU5W3ZLtMnReSEcFqGtvew",
+      "json": "{\"v\": 1, \"id\": \"00000000-0000-4000-8000-000000000102\", \"criado_em\": \"2026-01-15T10:30:00-03:00\", \"tipo_msg\": \"nota_texto\", \"nota_id\": \"00000000-0000-4000-8000-000000000003\", \"cofre\": \"Cofre B\", \"texto\": \"ideia de a\u00e7\u00e3o, \u00e9 isso\"}"
+    },
+    {
+      "key_b64": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+      "blob_b64": "BAQEBAQEBAQEBAQEH6W4qhN1oLHqJzIPB8eBIqRpPVRCuVfdOh8MkD05X7uNRQtZYwJJBpPRGyxN7m3RDtflrb+G6uXX1WSgdJSLaNlbwSB+VQUqR7YiqgQ++u05/CCZbutBVA6BdpiUvkLGPTESlLCZ25hoLireYmY4PzWVejLLEimiN4ySNXkNIsaVwsTe8/uQiOLyxbTcsR7Q8JLM4FLuFVBIj+/Cwu5AKZRvq9am5lO3u/QEX2m8dIP76YmRTrUnZcv9VtRB4nw8eu6wacKK/t2J1k61XyKc2uPrvTa5PjWWMCgBGcYHXxkqMIvBAYH6p+617IhCc8EfbeNWLbOIcVfRuzmxJfvlpRrI05fVOLIg5meLCQqat0V1CTehJirUOg2h0kN9bw4KwaN8djBwR7cs",
+      "json": "{\"v\": 1, \"id\": \"00000000-0000-4000-8000-000000000103\", \"criado_em\": \"2026-01-15T10:30:00-03:00\", \"tipo_msg\": \"complemento\", \"nota_id\": \"00000000-0000-4000-8000-000000000001\", \"complemento_id\": \"00000000-0000-4000-8000-000000000004\", \"audio\": \"YXVkaW8gc2ludGV0aWNv\", \"duracao_s\": 7}"
+    },
+    {
+      "key_b64": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+      "blob_b64": "BQUFBQUFBQUFBQUFNxSuU5odq8YfrGKEKykm92VHpO/U6qW7HxHiE+4SJG0fc3g5euYQIUx4AAJ8/L4YjM+IUEXqQoS5Wua0K7TGzn06HhrSBuHb+WKw1UY/DywQeBWfQQKwSEo4PlMRNB6cFHtODFNXu+p0Eah8i4ZIhxQ/gG/gdSJO6bsckJ5CvaJenxFTnkRTkdlnYrr9Vo+mIK2c6z23/nz9/LFpZBtoFqyi6if8zLPV4wWNxWls",
+      "json": "{\"v\": 1, \"id\": \"00000000-0000-4000-8000-000000000104\", \"criado_em\": \"2026-01-15T10:30:00-03:00\", \"tipo_msg\": \"novo_cofre\", \"nome\": \"Cofre C\", \"cliente\": true}"
+    },
+    {
+      "key_b64": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+      "blob_b64": "BgYGBgYGBgYGBgYGR3qbq0OVnL37RuzaZVn5Hzu0WGF1WbTxm8+myjOHV3aUxImRdpq/CyGdAUlZzoF0viLRx2YX2sstpGfj8x+cJBXokJHO08jTuOBm0W6tHORXFmKqEmVCtCQKNgNqydKkyTmRQu1FHrNdBfA4PPf5O/HoP5I01AMWR2q3Lm/M/whPOjq6x8i3zEtcpXDHBLrJ5XoEfdb3MFJaFnJK3BXNiX8cO3kaOQEJU3T6qBa0AtAjG7WlmkZpVLJPstROyt6CEdVJ44rF89c2DMR+ZXY=",
+      "json": "{\"v\": 1, \"id\": \"00000000-0000-4000-8000-000000000105\", \"criado_em\": \"2026-01-15T10:30:00-03:00\", \"tipo_msg\": \"mover\", \"nota_id\": \"00000000-0000-4000-8000-000000000003\", \"destino\": \"Cofre A\"}"
+    },
+    {
+      "key_b64": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+      "blob_b64": "BwcHBwcHBwcHBwcHdEjQflUv5tjmv3rkomvUuZFsvUO4x7Ep04tuyjTzBisXdNxGsXDEvzLOkc3yJ+kWi3mDf/eNISn+moiDCdfclSiHyhKr+hrzevYHccqyJY71CGgThpR7BMIKVGRYFyWn7q37xK4kS+I8G+ocsOKENNhE4kJMJ21Ny5iOrOFG6SA+5eY10IK8nxcGDS3o57qiBHgH9b0Zs2nDYs/9Fjvwm7IEpsco8ElKbbFSQmew1gPUH8TaoHZVnF2BMfOqKYvWH1sz1AEEwYXXU6NlZRj7EtHDdfOietrkGwz7jHnCb9IibbyzEaFcUWt51buyhMGpptBhtASI/EqcuynKLj29E0Cwj+CiASXmQgf3kR7Pcbxy7JomGxsSiOS7jtjOXFaHHV6aminqAATkymXWrfgUMrwnlta6smMDFWIcFYhgJbuhS/bzrziUwB4gKjU3ZRWlXJus05ZqUeC+CsNLcRWwDaRRTZQjXoijk2hFf7HvAhADoG05uIlUHwJPvYM=",
+      "json": "{\"v\": 1, \"id\": \"00000000-0000-4000-8000-000000000106\", \"criado_em\": \"2026-01-15T10:30:00-03:00\", \"tipo_msg\": \"resultado\", \"nota_id\": \"00000000-0000-4000-8000-000000000001\", \"status\": \"processado\", \"titulo\": \"T\u00edtulo de teste\", \"tipo\": \"ideia\", \"resumo\": \"Resumo sint\u00e9tico.\", \"cofre\": \"Cofre A\", \"cliente_sugerido\": null, \"pontos\": 3, \"em_aberto\": 1, \"erro\": null}"
+    },
+    {
+      "key_b64": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+      "blob_b64": "CAgICAgICAgICAgIUWGu9NekB9rwdTL8oqdQGtMlM5+l8klfaCY5Ec2Hf890tRDPXuEeGqfs3O3PNYcdwQ+V9ZScHy55NwDBYJJxeawojSRd2xG5ybVlKhqsLiPSP/hL5HPDkMFcVsAIdlVI8Jrq5ZupX33SAz/qSd+XOVoq0pKzGlGcECmvkffDt6h/WDapW1ddnpH5uj2qybNwuvgd5RKbuoyKdd2ousP/LXFwGT9sOH86wTkDBsgCNHtwFeD8xgNcizprcRpvkLmAF6fdI6FiZPlFHMMtoRT7FZ7CX73A91hPQnDA5g0RO4zHxEQGHsne22m7WC7ZuZMnNd7lGyY7FBWeD3PM6rALfwre1JZ1eXlPGQJPtz4Rqg==",
+      "json": "{\"v\": 1, \"id\": \"00000000-0000-4000-8000-000000000107\", \"criado_em\": \"2026-01-15T10:30:00-03:00\", \"tipo_msg\": \"destinos\", \"cofres\": [{\"nome\": \"Cofre A\", \"cliente\": false}, {\"nome\": \"Cofre B\", \"cliente\": true}], \"atualizado_em\": \"2026-01-15T10:30:00-03:00\"}"
+    }
+  ]
+}
