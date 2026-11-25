@@ -20,7 +20,7 @@ struct SyncReport: Equatable {
 @Observable
 final class Sync {
     static let shared = Sync()
-    static let teto: TimeInterval = 3600  // teto do Backoff
+    nonisolated static let teto: TimeInterval = 3600  // teto do Backoff
 
     /// Quando tentar de novo: a menor `proximaTentativa` pendente, com piso de 5 s e teto de 1 h. Função pura.
     nonisolated static func proximoDespertar(_ datas: [Date], agora: Date) -> Date? {
